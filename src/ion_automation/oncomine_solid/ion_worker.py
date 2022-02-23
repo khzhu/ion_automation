@@ -26,6 +26,7 @@ class oncomine_solid(object):
         self.WORK_DIR = config['SOLID']['WORK_DIR']
         self.DEST_PATH = config['SOLID']['DEST_PATH']
         self.INCL_FUNCS = config['SOLID']['INCL_FUNCS'].split(",")
+        self.LOCATIONS = config['SOLID']['LOCATIONS'].split(",")
         self.EXCL_CALLS = config['SOLID']['EXCL_CALLS'].split(",")
         self.VAR_TYPES = config['SOLID']['VAR_TYPES'].split(";")
         self.CNV_GENES = config['SOLID']['CNV_GENES'].split(",")
@@ -123,6 +124,12 @@ class oncomine_solid(object):
         except:
             return None
 
+    def oncomine_in(self, row):
+        try:
+            return row['Oncomine Variant Annotator v3.2'].str.len() > 0
+        except:
+            return False
+
     def is_hotspot(self, row):
         #Oncomine=[transcript=NM_020975.5;normalizedRef=C;normalizedPos=43617397;normalizedAlt=T;type=Hotspot;...]
         try:
@@ -132,7 +139,6 @@ class oncomine_solid(object):
 
     def get_download_link(self, sample):
         try:
-
             params = {'name': "%s_v1"%sample}
             headers = { 'Content-Type':"application/x-www-form-urlencoded", 'Authorization' : self.TOKEN}
             r = requests.get('https://%s/api/v1/getvcf'%self.HOST, headers=headers, params=params, verify=False)
@@ -267,6 +273,12 @@ class oncomine_solid(object):
         except Exception as e:
             return None
 
+    def get_location(self, row):
+        try:
+            return row['location'].split(":")[1]
+        except:
+            return row['location']
+
     def get_tsv_fusin_key(self, row):
         try:
             #chr1:156100564-chr1:156844698_LMNA-NTRK1.L2N11
@@ -319,7 +331,7 @@ class oncomine_solid(object):
             ion_variants = pd.read_csv(filtered_tsv, sep="\t", skiprows=2)
 
             # filters that are applied
-            ion_variants = ion_variants.loc[(ion_variants['filter'].isin(['PASS','GAIN','.'])) &
+            ion_variants = ion_variants.loc[(ion_variants['filter'].isin(['PASS','GAIN','LOSS','.'])) &
                                                             (~ion_variants['type'].isin(self.EXCL_CALLS))]
             ion_variants['tumor_AF'] = ion_variants.apply(lambda x: self.get_tumor_AF(x), axis=1)
             ion_variants['ExAC_info'] = ion_variants.apply(lambda x: self.get_ExAC_info(x), axis=1)
@@ -328,18 +340,20 @@ class oncomine_solid(object):
             ion_variants['5% CI'] = ion_variants.apply(lambda x: self.get_CI_copy_number(x), axis=1)
             ion_variants['MAF'] = ion_variants.apply(lambda x: self.get_alt_maf(x), axis=1)
             ion_variants['HS'] = ion_variants.apply(lambda x: "yes" if self.is_hotspot(x) else "", axis=1)
+            ion_variants['ONCOIN'] = ion_variants.apply(lambda x: "in" if self.oncomine_in(x) else "", axis=1)
             ion_variants['artifact'] = ion_variants.apply(lambda x: self.is_artifact(x), axis=1)
+            ion_variants['splice_site'] = ion_variants.apply(lambda x: self.get_location(x), axis=1)
 
-            ion_variants_snv = ion_variants.loc[ (ion_variants['HS'] == 'yes') |
+            ion_variants_snv = ion_variants.loc[ (ion_variants['HS'] == 'yes') | (ion_variants['ONCOIN'] == 'in') |
                                     ((ion_variants['type'].isin(self.VAR_TYPES))
-                                    & (ion_variants['function'].isin(self.INCL_FUNCS))
+                                    & (ion_variants['function'].isin(self.INCL_FUNCS) | ion_variants['splice_site'].isin(self.LOCATIONS))
                                     & ((ion_variants['MAF'].isnull()) |(ion_variants['MAF'].astype(float) <= 0.01))
                                     & (~ion_variants['artifact']))]
 
-            ion_variants_snv = ion_variants_snv.loc[ ((is_numeric_dtype(ion_variants_snv['tumor_AF']))
-                                                          & (ion_variants_snv['tumor_AF'].astype(float) >= 3)) |
-                                                     (is_string_dtype(ion_variants_snv['tumor_AF']))]
+            ion_variants_snv = ion_variants_snv.loc[ (ion_variants_snv['tumor_AF'].astype(float) >= 3) &
+                                                     ion_variants_snv['gene'].isin(self.MUT_GENES)]
             ion_variants_cnv = ion_variants.loc[(ion_variants['type'] == 'CNV') &
+                                                (ion_variants['gene'].isin(self.CNV_GENES)) &
                                                                 (ion_variants['Copy Number'].astype(float) >= 5) &
                                                                 (ion_variants['5% CI'].astype(float) >= 4)]
             ion_variants_fusion = ion_variants.loc[(ion_variants['type'].isin(['FUSION','RNAExonVariant']))]
