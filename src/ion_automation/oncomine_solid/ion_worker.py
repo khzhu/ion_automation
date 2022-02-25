@@ -350,8 +350,10 @@ class oncomine_solid(object):
                                     & ((ion_variants['MAF'].isnull()) |(ion_variants['MAF'].astype(float) <= 0.01))
                                     & (~ion_variants['artifact']))]
 
-            ion_variants_snv = ion_variants_snv.loc[ (ion_variants_snv['tumor_AF'].astype(float) >= 3) &
-                                                     ion_variants_snv['gene'].isin(self.MUT_GENES)]
+            ion_variants_snv = ion_variants_snv.loc[ (((ion_variants_snv['HS'] == 'yes') &
+                                                      (ion_variants_snv['tumor_AF'].astype(float) >= 1)) |
+                                                     (ion_variants_snv['tumor_AF'].astype(float) >= 3))
+                                                     & (ion_variants_snv['gene'].isin(self.MUT_GENES))]
             ion_variants_cnv = ion_variants.loc[(ion_variants['type'] == 'CNV') &
                                                 (ion_variants['gene'].isin(self.CNV_GENES)) &
                                                                 (ion_variants['Copy Number'].astype(float) >= 5) &
