@@ -6,8 +6,6 @@ import re
 import ast
 from time import time
 import logging
-from pandas.api.types import is_string_dtype
-from pandas.api.types import is_numeric_dtype
 import configparser
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -74,7 +72,6 @@ class oncomine_solid(object):
         try:
             alt_allele = row['genotype'].split("/")[1]
             if alt_allele in row['allele_frequency_%']:
-                #CTTTTTTTTTTTTGA=6.61,CTTTTTTTTTTTTGAT=4.57,CTTTTTTTTTTTTTGA=75.23,CTTTTTTTTTTTTTGAT=13.59
                 alt_allele = row['genotype'].split("/")[1]
                 m = re.search(r'(\d+.\d+)(.*)',row['allele_frequency_%'].split("%s="%alt_allele)[1])
                 return m.group(1)
@@ -85,10 +82,7 @@ class oncomine_solid(object):
             return row['allele_frequency_%']
 
     def is_artifact(self, row):
-        if row['type'] == 'SNV' and row['ref'] not in row['genotype']:
-            return True
-        else:
-            return False
+        return (row['type'] == 'SNV' and row['ref'] not in row['genotype'])
 
     def get_ExAC_info(self, row):
         try:
@@ -131,7 +125,6 @@ class oncomine_solid(object):
             return False
 
     def is_hotspot(self, row):
-        #Oncomine=[transcript=NM_020975.5;normalizedRef=C;normalizedPos=43617397;normalizedAlt=T;type=Hotspot;...]
         try:
             return "Hotspot" in row['Oncomine Variant Annotator v3.2']
         except:
@@ -281,7 +274,6 @@ class oncomine_solid(object):
 
     def get_tsv_fusin_key(self, row):
         try:
-            #chr1:156100564-chr1:156844698_LMNA-NTRK1.L2N11
             if row['type'] == 'RNAExonVariant':
                 if row['gene'] == 'EGFR|EGFR':
                     return 'EGFR-EGFR.E1E8.DelPositive.1'
@@ -307,6 +299,15 @@ class oncomine_solid(object):
             return m.group(3)
         except:
             return 0
+
+    def rename_gene(self, row):
+        try:
+            if row['type'] == 'SNV':
+                return row['gene'].split("|")[0]
+            else:
+                return row['gene']
+        except:
+            return row['gene']
 
     def process_sample(self, args):
         sample, run_id, bar_code, logger = tuple(args)
@@ -339,18 +340,19 @@ class oncomine_solid(object):
             ion_variants['Copy Number'] = ion_variants.apply(lambda x: self.get_copy_number(x), axis=1)
             ion_variants['5% CI'] = ion_variants.apply(lambda x: self.get_CI_copy_number(x), axis=1)
             ion_variants['MAF'] = ion_variants.apply(lambda x: self.get_alt_maf(x), axis=1)
-            ion_variants['HS'] = ion_variants.apply(lambda x: "yes" if self.is_hotspot(x) else "", axis=1)
+            ion_variants['HS'] = ion_variants.apply(lambda x: "HS" if self.is_hotspot(x) else "", axis=1)
             ion_variants['ONCOIN'] = ion_variants.apply(lambda x: "in" if self.oncomine_in(x) else "", axis=1)
             ion_variants['artifact'] = ion_variants.apply(lambda x: self.is_artifact(x), axis=1)
             ion_variants['splice_site'] = ion_variants.apply(lambda x: self.get_location(x), axis=1)
+            ion_variants['gene'] = ion_variants.apply(lambda x: self.rename_gene(x), axis=1)
 
-            ion_variants_snv = ion_variants.loc[ (ion_variants['HS'] == 'yes') | (ion_variants['ONCOIN'] == 'in') |
+            ion_variants_snv = ion_variants.loc[ (ion_variants['HS'] == 'HS') | (ion_variants['ONCOIN'] == 'in') |
                                     ((ion_variants['type'].isin(self.VAR_TYPES))
                                     & (ion_variants['function'].isin(self.INCL_FUNCS) | ion_variants['splice_site'].isin(self.LOCATIONS))
                                     & ((ion_variants['MAF'].isnull()) |(ion_variants['MAF'].astype(float) <= 0.01))
                                     & (~ion_variants['artifact']))]
 
-            ion_variants_snv = ion_variants_snv.loc[ (((ion_variants_snv['HS'] == 'yes') &
+            ion_variants_snv = ion_variants_snv.loc[ (((ion_variants_snv['HS'] == 'HS') &
                                                       (ion_variants_snv['tumor_AF'].astype(float) >= 1)) |
                                                      (ion_variants_snv['tumor_AF'].astype(float) >= 3))
                                                      & (ion_variants_snv['gene'].isin(self.MUT_GENES))]
@@ -366,8 +368,8 @@ class oncomine_solid(object):
             ion_variants.insert(1, "Sample", sample)
             ion_variants.insert(2, "Barcode", bar_code)
             ion_variants['fusion_key'] = ion_variants.apply(lambda x: self.get_tsv_fusin_key(x), axis=1)
-            print("Before filtering")
-            print(ion_variants.head(3).to_string())
+            logger.info("Before filters are applied...")
+            logger.info(ion_variants.head(3).to_string())
             if not ion_fusions.empty:
                 ion_variants = ion_variants.merge(ion_fusions, left_on="fusion_key", right_on="fusion_key",how="left")
                 ion_variants.drop(ion_variants[(ion_variants['type'] == 'RNAExonVariant') &
@@ -379,10 +381,10 @@ class oncomine_solid(object):
                 return pd.DataFrame({"Run": run_id, "Sample": sample, "Barcode": bar_code,
                                                    "Locus": 'negative', "Genes": 'NA', "Type": 'NA',
                                                    "Exon": 'NA', "Transcript": 'NA', "Coding": 'NA',
-                                                   "Variant Effect": 'NA', 'Genotype': 'NA',
+                                                   "Variant Effect": 'NA', 'Genotype': 'NA', 'Hotspot':'NA',
                                                    "% Frequency": "NA", "ExAC_AF": 'NA', "Amino Acid Change": 'NA',
                                                    "Read Counts": 'NA', "Read/M": 'NA', "Copy Number": 'NA',
-                                                   "CNV Confidence": 'NA', "AMAF": 'NA', "GMAF": 'NA', "EMAF": 'NA',"HS":""},
+                                                   "CNV Confidence": 'NA', "Coverage": 'NA'},
                                                   index=[0])
             ion_variants.drop(columns=['ExAC_info', 'go', '5000Exomes', 'hrun', 'drugbank',
                                                'fusion_presence', 'ratio_to_wild_type', 'length',
@@ -397,20 +399,16 @@ class oncomine_solid(object):
                                                  '# locus': 'Locus', 'gene': 'Genes', 'exon': 'Exon',
                                                  'transcript': 'Transcript', 'genotype': 'Genotype',
                                                  'type': 'Type', 'coding': 'Coding', 'function': 'Variant Effect',
-                                                 'ref': 'Ref', 'tumor_AF': '% Frequency',
+                                                 'ref': 'Ref', 'tumor_AF': '% Frequency', 'HS': 'Hotspot',
                                                  'protein': 'Amino Acid Change', 'coverage': 'Coverage',
                                                  'exac': 'ExAC', 'MAF':'ExAC_AF'},
                                         inplace=True)
-
-            ion_variants['AMAF'] = new[0]
-            ion_variants["GMAF"] = new[1]
-            ion_variants["EMAF"] = new[2]
             ion_variants = ion_variants[
-                ["Run", "Sample", "Barcode", "Locus", "Genes", "Type", "Exon", "Transcript", "Coding", "Variant Effect", "Genotype",
-                 "% Frequency", "ExAC_AF", "Amino Acid Change", "Read Counts", "Read/M", "Copy Number", "CNV Confidence", "AMAF", "GMAF", "EMAF","HS"]]
+                ["Run", "Sample", "Barcode", "Locus", "Genes", "Type", "Exon", "Transcript", "Coding", "Variant Effect", "Genotype", "Hotspot",
+                 "% Frequency", "ExAC_AF", "Amino Acid Change", "Read Counts", "Read/M", "Copy Number", "CNV Confidence", "Coverage"]]
             logger.info("%s processed"%sample)
-            print("After filters applied")
-            print(ion_variants.head(3).to_string())
+            logger.info("After filters are applied")
+            logger.info(ion_variants.head(3).to_string())
 
             return ion_variants.drop_duplicates(subset=['Sample','Barcode','Locus','Genes','Type'])
             #return ion_variants
