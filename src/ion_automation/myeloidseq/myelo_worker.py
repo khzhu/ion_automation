@@ -154,7 +154,7 @@ class myeloseq(object):
         QC_plot_cmd = "Rscript MyeloSeq-QC-plot.R"
         os.system(QC_plot_cmd)
         logger.info("Copying the QC plots over to the Z drive...")
-        mkdir_cmd = 'echo %s | sudo -S mkdir -p %s' % (self.UID. os.path.join(self.DEST_PATH,
+        mkdir_cmd = 'echo %s | sudo -S mkdir -p %s' % (self.UID, os.path.join(self.DEST_PATH,
                                                                     "reports/%s" % run_id))
         os.system(mkdir_cmd)
         plot_cp_cmd = 'echo %s | sudo -S cp -f %s %s' % (self.UID, "*.pdf",
@@ -185,7 +185,7 @@ class myeloseq(object):
         cp_var_cmd = 'echo %s | sudo -S cp -r %s %s' % (self.UID, self.VAR_HOME,
                     os.path.join(self.DEST_PATH, "downloads/%s" % run_id))
         os.system(cp_var_cmd)
-        rm_var_cmd = 'echo %s | sudo -S rm -rf %s/*'%(self.UID, self.UVAR_HOME)
+        rm_var_cmd = 'echo %s | sudo -S rm -rf %s/*'%(self.UID, self.VAR_HOME)
         os.system(rm_var_cmd)
         rm_outfiles_cmd = 'echo %s | sudo -S rm -f %s/*.csv %s/*.pdf %s/*.xlsx %s/*.tsv %s/*.html'%(self.UID,
                 self.MYELOSEQ_HOME,self.MYELOSEQ_HOME, self.MYELOSEQ_HOME, self.MYELOSEQ_HOME, self.MYELOSEQ_HOME)
@@ -587,7 +587,7 @@ class myeloseq(object):
                     if sample == "" or sample == None: continue
                     RESULTS.append(self.process_sample([sample,run_id,barcode,logging.getLogger(sample)]))
                 except:
-                    continue
+                    pass
             if RESULTS and len(RESULTS) > 0:
                 df = pd.concat(RESULTS)
                 sc_df = df.loc[df['Sample'] == sc_sample_name]
