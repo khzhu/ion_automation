@@ -23,6 +23,7 @@ class oncomine_solid(object):
         self.VAR_DIR = config['SOLID']['VAR_DIR']
         self.WORK_DIR = config['SOLID']['WORK_DIR']
         self.DEST_PATH = config['SOLID']['DEST_PATH']
+        self.AA_CODES = config['DEFAULT']['AA_CODES']
         self.INCL_FUNCS = config['SOLID']['INCL_FUNCS'].split(",")
         self.LOCATIONS = config['SOLID']['LOCATIONS'].split(",")
         self.EXCL_CALLS = config['SOLID']['EXCL_CALLS'].split(",")
@@ -31,6 +32,7 @@ class oncomine_solid(object):
         self.MUT_GENES = config['SOLID']['MUT_GENES'].split(",")
         self.FUSION_GENES = config['SOLID']['FUSION_GENES'].split(",")
         self._workbook = None
+        self.codon_df = pd.read_csv(self.AA_CODES, sep=',')
 
     @property
     def workbook(self):
@@ -171,6 +173,9 @@ class oncomine_solid(object):
         cp_cmd = 'echo %s | sudo -S cp -f %s %s' % (self.UID, "%s.xlsx" % run_id,
                                                             os.path.join(self.DEST_PATH, "reports/%s" % run_id))
         os.system(cp_cmd)
+        cp_csv_cmd = 'echo %s | sudo -S cp -f %s %s' % (self.UID, "%s.csv" % run_id,
+                                                            os.path.join(self.DEST_PATH, "reports/%s" % run_id))
+        os.system(cp_csv_cmd)
         cp_cmd = 'echo %s | sudo -S cp -f %s %s' % (self.UID, "sc_filtered_variants.tsv",
                                                             os.path.join(self.DEST_PATH, "reports/%s/%s_SC_Variants.tsv" % (
                                                             run_id, run_id)))
@@ -309,6 +314,49 @@ class oncomine_solid(object):
         except:
             return row['gene']
 
+    def get_codon_letter(self, code):
+        try:
+            idx = self.codon_df.loc[self.codon_df['Codon'] == code].index
+            return self.codon_df.iloc[idx]['Letter'].values[0]
+        except:
+            return None
+
+    def get_codon_code(self, AA_change):
+        try:
+            AA_change = AA_change.replace("p.","")
+            if "fs" in AA_change:
+                m = re.search(r'([A-Za-z]+)([0-9]+)([A-Za-z]+)fs(\w+)', AA_change)
+                return "p.%s%s%sfs%s" %(self.get_codon_letter(m.group(1)),
+                                        m.group(2),
+                                        self.get_codon_letter(m.group(3)),
+                                        m.group(4))
+            elif "del" in AA_change and "_" not in AA_change:
+                m = re.search(r'([A-Za-z]+)([0-9]+)del', AA_change)
+                return "p." + self.get_codon_letter(m.group(1)) + m.group(2) + "del"
+            elif "del" in AA_change and "_" in AA_change:
+                m = re.search(r'([A-Za-z]+)([0-9]+)_([A-Za-z]+)([0-9]+)del', AA_change)
+                return "p." + self.get_codon_letter(m.group(1)) + m.group(2) + "_" + self.get_codon_letter(m.group(3)) + m.group(4) + "del"
+            elif "ins" in AA_change:
+                #p.Tyr599_Asp600insSerThrTyrAspPheArgGluTyrGluTyr
+                m = re.search(r'([A-Za-z]+)([0-9]+)_([A-Za-z]+)([0-9]+)ins(\w+)', AA_change)
+                ins_str = ''
+                for a in re.findall('...', m.group(5)):
+                    ins_str += self.get_codon_letter(a)
+                return "p." + self.get_codon_letter(m.group(1)) + m.group(2) + "_" + self.get_codon_letter(m.group(3)) + m.group(
+                    4) + "ins" + ins_str
+            else:
+                m = re.search(r'([A-Za-z]+)([0-9]+)([A-Za-z]+)', AA_change)
+                return "p." + self.get_codon_letter(m.group(1)) + m.group(2) + self.get_codon_letter(m.group(3))
+        except:
+            return AA_change
+
+    def get_AA_Change(self, row):
+        if isinstance(row['Amino Acid Change'], str):
+            aa_change = row['Amino Acid Change'].split("|")[0]
+            return self.get_codon_code(aa_change)
+        else:
+            return 'NA'
+
     def process_sample(self, args):
         sample, run_id, bar_code, logger = tuple(args)
         logger.info("start processing %s from %s"%(sample,run_id))
@@ -383,11 +431,11 @@ class oncomine_solid(object):
                                                    "Exon": 'NA', "Transcript": 'NA', "Coding": 'NA',
                                                    "Variant Effect": 'NA', 'Genotype': 'NA', 'Hotspot':'NA',
                                                    "% Frequency": "NA", "ExAC_AF": 'NA', "Amino Acid Change": 'NA',
-                                                   "Read Counts": 'NA', "Read/M": 'NA', "Copy Number": 'NA',
-                                                   "CNV Confidence": 'NA', "Coverage": 'NA'},
+                                                   "AA": "NA", "Read Counts": 'NA', "Read/M": 'NA', "Copy Number": 'NA',
+                                                   "CNV Confidence": 'NA', "Coverage": 'NA', "Length": 'NA'},
                                                   index=[0])
             ion_variants.drop(columns=['ExAC_info', 'go', '5000Exomes', 'hrun', 'drugbank',
-                                               'fusion_presence', 'ratio_to_wild_type', 'length',
+                                               'fusion_presence', 'ratio_to_wild_type',
                                                'norm_count_within_gene', 'iscn', 'filter',
                                                'allele_coverage', 'allele_ratio', 'pvalue',
                                                'precision', 'Subtype', 'dgv', 'cnv_pvalue',
@@ -401,11 +449,14 @@ class oncomine_solid(object):
                                                  'type': 'Type', 'coding': 'Coding', 'function': 'Variant Effect',
                                                  'ref': 'Ref', 'tumor_AF': '% Frequency', 'HS': 'Hotspot',
                                                  'protein': 'Amino Acid Change', 'coverage': 'Coverage',
-                                                 'exac': 'ExAC', 'MAF':'ExAC_AF'},
+                                                 'exac': 'ExAC', 'MAF':'ExAC_AF','length':'Length'},
                                         inplace=True)
+            ion_variants['AA'] = ion_variants.apply(lambda x: self.get_AA_Change(x), axis=1)
             ion_variants = ion_variants[
                 ["Run", "Sample", "Barcode", "Locus", "Genes", "Type", "Exon", "Transcript", "Coding", "Variant Effect", "Genotype", "Hotspot",
-                 "% Frequency", "ExAC_AF", "Amino Acid Change", "Read Counts", "Read/M", "Copy Number", "CNV Confidence", "Coverage"]]
+                 "% Frequency", "ExAC_AF", "Amino Acid Change", "AA", "Read Counts", "Read/M", "Copy Number",
+                 "CNV Confidence", "Coverage", "Length"]]
+
             logger.info("%s processed"%sample)
             logger.info("After filters are applied")
             logger.info(ion_variants.head(3).to_string())
@@ -443,6 +494,14 @@ class oncomine_solid(object):
                 sc_df.to_csv("sc_filtered_variants.tsv", index = False, sep = "\t")
                 sample_df = df.loc[df['Sample'] != sc_sample_name]
                 logger.info(df.to_string())
+                # save in excel/csv
+                add_df = sample_df.loc[~(sample_df['Sample'].str.contains("SC-DNA|NC-DNA"))]
+                add_df = add_df.drop(columns=['Run','Read Counts','Read/M','ExAC_AF'])
+                add_df = add_df.rename(columns={'Barcode':'BC','Variant Effect':'Variant.Effect','Amino Acid Change':'Amino.Acid.Change',
+                                       '% Frequency':'Frequency','Hotspot':'Info'})
+                add_df = add_df[['Sample','BC','Locus','Genes','Type','Exon','Transcript','Coding','Variant.Effect',
+                                 'Genotype','Info','Length','Frequency','Amino.Acid.Change','AA','Coverage']]
+                add_df.to_csv("%s.csv" % run_id, index=False, sep=",")
                 self.write_to_excel(sample_df)
                 logger.info('Took %s seconds to process samples', time() - ts)
         except Exception as e:
