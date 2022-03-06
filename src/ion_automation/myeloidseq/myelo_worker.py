@@ -9,7 +9,7 @@ import logging
 from pandas.api.types import is_string_dtype
 from pandas.api.types import is_numeric_dtype
 import configparser
-from dropout_worker import dropout
+from ion_automation.myeloidseq.dropout_worker import dropout
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("ion_reporter")
@@ -29,9 +29,11 @@ class myeloseq(object):
         self.DEST_PATH = config['MYELOSEQ']['DEST_PATH']
         self.AA_CODES = config['MYELOSEQ']['AA_CODES']
         self.MYELOSEQ_GENES = config['MYELOSEQ']['MYELOSEQ_GENES']
-        self.INCL_FUNCTIONS = config['MYELOSEQ']['INCL_FUNCTIONS'].split(",")
+        self.INCL_FUNCS = config['MYELOSEQ']['INCL_FUNCS'].split(",")
         self.EXCL_CALLS = config['MYELOSEQ']['EXCL_CALLS'].split(",")
+        self.LOCATIONS = config['MYELOSEQ']['LOCATIONS'].split(",")
         self.STYLE_CSS = config['MYELOSEQ']['STYLE_CSS']
+        self.VAR_TYPES = config['SOLID']['VAR_TYPES'].split(";")
 
         self.codon_df = pd.read_csv(self.AA_CODES, sep=',')
         self.myeloseq_68genes = pd.read_excel(self.MYELOSEQ_GENES, engine='openpyxl', sheet_name='68-gene', skiprows=0)
@@ -86,7 +88,6 @@ class myeloseq(object):
             else:
                 return row['allele_frequency_%']
         except:
-            print(row['allele_frequency_%'])
             return row['allele_frequency_%']
 
     def is_artifact(self, row):
@@ -144,8 +145,8 @@ class myeloseq(object):
                 sample_pair = os.path.dirname(download_link).split("/")[6]
                 file_path = os.path.join(self.VAR_HOME,sample_pair)
                 return glob.glob(os.path.join(file_path, "%s*-full.tsv" % sample_pair))[0],\
-                       glob.glob(os.path.join(file_path, "%s*_Filtered_*.vcf" %sample_pair))[0], \
-                       glob.glob(os.path.join(file_path, "%s*_Filtered_*-oncomine.tsv" % sample_pair))[0]
+                       glob.glob(os.path.join(file_path, "%s*_Non-Filtered_*.vcf" %sample_pair))[0], \
+                       glob.glob(os.path.join(file_path, "%s*_Non-Filtered_*-oncomine.tsv" % sample_pair))[0]
         except:
             return None, None, None
 
@@ -318,14 +319,6 @@ class myeloseq(object):
         except:
             return 0
 
-    def get_fusion_RPM(self, row):
-        try:
-            m = re.search(r'SVTYPE=([RNAExonVariant]*[Fusion]*);READ_COUNT=(.+);GENE_NAME=(.+);RPM=(.+);NORM_COUNT=(.+)',
-                          row['INFO']);
-            return m.group(4)
-        except:
-            return 0
-
     def get_codon_letter(self, code):
         try:
             idx = self.codon_df.loc[self.codon_df['Codon'] == code].index
@@ -362,13 +355,32 @@ class myeloseq(object):
         except:
             return AA_change
 
-
     def get_AA_Change(self, row):
         if isinstance(row['Amino Acid Change'], str):
             aa_change = row['Amino Acid Change'].split("|")[0]
             return self.get_codon_code(aa_change)
         else:
             return 'NA'
+
+    def empty_row(self,row):
+        try:
+            if row['Type'] in ['SNV', 'INDEL'] and row['% Frequency'].astype(float) > 0:
+                return False
+            elif row['Type'] == 'RNAExonVariant':
+                if row['Read Counts'] == 'NA' and row['Read/M'] == 'NA':
+                    return True
+                elif row['Genes'] in (['BRAF','EGFR']):
+                    return True
+                elif row['Read Counts'].isnull().values.any() or \
+                    row['Read/M'].isnull().values.any():
+                    return True
+            elif row['Type'] in ['SNV', 'INDEL'] and str(row['Variant Effect']) == 'nan' \
+                    and str(row['Transcript']) == 'nan' and str(row['Coding']) == 'nan':
+                return True
+            else:
+                return False
+        except:
+            return False
 
     def select_gene(self, row):
         try:
@@ -396,6 +408,12 @@ class myeloseq(object):
         except:
             return row['function']
 
+    def get_location(self, row):
+        try:
+            return row['location'].split(":")[1]
+        except:
+            return row['location']
+
     def process_sample(self, args):
         sample, run_id, bar_code, logger = tuple(args)
         logger.info("start processing %s from %s"%(sample,run_id))
@@ -404,7 +422,7 @@ class myeloseq(object):
             if filtered_vcf:
                 try:
                     ion_fusions = pd.read_csv(filtered_vcf, sep="\t", skiprows=180)
-                    ion_fusions = ion_fusions.loc[ion_fusions['FILTER'] == "PASS"]
+                    ion_fusions = ion_fusions.loc[ion_fusions['FILTER'].isin(["PASS","."])]
                     ion_fusions['fusion_key'] = ion_fusions.apply(lambda x: self.get_vcf_fusion_key(x), axis=1)
                     ion_fusions['Read Counts'] = ion_fusions.apply(lambda x: self.get_fusion_read_counts(x), axis=1)
                     ion_fusions['Read/M'] = ion_fusions.apply(lambda x: self.get_fusion_RPM(x), axis=1)
@@ -417,7 +435,7 @@ class myeloseq(object):
             ion_variants = pd.read_csv(filtered_tsv, sep="\t", skiprows=2)
 
             # filters that are applied
-            ion_variants = ion_variants.loc[(ion_variants['filter'].isin(['PASS','GAIN'])) &
+            ion_variants = ion_variants.loc[(ion_variants['filter'].isin(['PASS','GAIN','.','LOSS'])) &
                                                             (~ion_variants['type'].isin(self.EXCL_CALLS))]
             ion_variants['tumor_AF'] = ion_variants.apply(lambda x: self.get_tumor_AF(x), axis=1)
             ion_variants['ExAC_info'] = ion_variants.apply(lambda x: self.get_ExAC_info(x), axis=1)
@@ -426,10 +444,11 @@ class myeloseq(object):
             ion_variants['HS'] = ion_variants.apply(lambda x: "yes" if self.is_hotspot(x) else "", axis=1)
             ion_variants['artifact'] = ion_variants.apply(lambda x: self.is_artifact(x), axis=1)
             ion_variants['function'] = ion_variants.apply(lambda x: self.remove_function_bar(x), axis=1)
+            ion_variants['splice_site'] = ion_variants.apply(lambda x: self.get_location(x), axis=1)
 
             ion_variants_snv = ion_variants.loc[ (ion_variants['HS'] == 'yes') | (ion_variants['type'] == 'FLT3ITD') |
-                                    ((ion_variants['type'].isin(['SNV','MNV,SNV','INDEL','MNV','INDEL,MNV','INDEL,SNV']))
-                                    & (ion_variants['function'].isin(self.INCL_FUNCTIONS))
+                                    ((ion_variants['type'].isin(self.VAR_TYPES))
+                                    & (ion_variants['function'].isin(self.INCL_FUNCS) | ion_variants['splice_site'].isin(self.LOCATIONS))
                                     & ((ion_variants['MAF'].isnull()) |(ion_variants['MAF'].astype(float) <= 0.01))
                                     & (~ion_variants['artifact']))]
 
@@ -448,10 +467,10 @@ class myeloseq(object):
             if oncomine_tsv:
                 onco_anno = pd.read_csv(oncomine_tsv, sep="\t", skiprows=2)
                 onco_anno = onco_anno.loc[(onco_anno['call'] == 'POS')]
-                onco_anno['anno_key'] = onco_anno.apply(
-                        lambda x: "%s:%s:%s" % (x['FUNC1.gene'], x['CHROM'], x['POS']) if x['FUNC1.gene'] != 'CSDE1' else
-                                    "%s:%s:%s" % (x['FUNC2.gene'], x['CHROM'], x['POS']), axis=1)
                 try:
+                    onco_anno['anno_key'] = onco_anno.apply(
+                            lambda x: "%s:%s:%s" % (x['FUNC1.gene'], x['CHROM'], x['POS']) if x['FUNC1.gene'] != 'CSDE1' else
+                                        "%s:%s:%s" % (x['FUNC2.gene'], x['CHROM'], x['POS']), axis=1)
                     NRAS_row = onco_anno.loc[onco_anno['FUNC2.gene'] == 'NRAS']
                     onco_anno.loc[onco_anno['FUNC2.gene'] == 'NRAS', 'FUNC1.transcript'] = NRAS_row.iloc[0]['FUNC2.transcript']
                     onco_anno.loc[onco_anno['FUNC2.gene'] == 'NRAS', 'FUNC1.protein'] = NRAS_row.iloc[0][
@@ -460,18 +479,18 @@ class myeloseq(object):
                         'FUNC2.coding']
                     onco_anno.loc[onco_anno['FUNC2.gene'] == 'NRAS', 'FUNC1.exon'] = NRAS_row.iloc[0][
                         'FUNC2.exon']
-                except Exception as e:
-                    print(str(e))
+                except:
+                    onco_anno['anno_key'] = onco_anno.apply(
+                            lambda x: "%s:%s:%s" % (x['FUNC1.gene'], x['CHROM'], x['POS']), axis=1)
                 try:
-                    onco_anno = onco_anno[
-                    ['anno_key', 'FUNC1.coding', 'FUNC1.exon', 'FUNC1.function', 'FUNC1.transcript', 'FUNC1.protein']]
+                    onco_anno = onco_anno[['anno_key', 'FUNC1.coding', 'FUNC1.exon', 'FUNC1.function', 'FUNC1.transcript', 'FUNC1.protein']]
                 except:
                     onco_anno['FUNC1.coding'] = 'NA'
                     onco_anno['FUNC1.function'] = 'NA'
                     onco_anno['FUNC1.transcript'] = 'NA'
                     onco_anno['FUNC1.protein'] = 'NA'
-                    onco_anno = onco_anno[
-                        ['anno_key', 'FUNC1.coding', 'FUNC1.exon', 'FUNC1.function', 'FUNC1.transcript', 'FUNC1.protein']]
+                    onco_anno = onco_anno[['anno_key', 'FUNC1.coding', 'FUNC1.exon', 'FUNC1.function', 'FUNC1.transcript', 'FUNC1.protein']]
+                logger.info(onco_anno.head(3).to_string())
 
                 ion_variants = ion_variants.merge(onco_anno, left_on="anno_key", right_on="anno_key", how="left")
                 print(ion_variants.shape)
@@ -482,6 +501,8 @@ class myeloseq(object):
                                                   & (ion_variants['type'] == "INDEL") &
                                                   (ion_variants['genotype'] == "TATGATGATGATGATGATGA/TATGATGATGATGATGA") &
                                                  (ion_variants['tumor_AF'].astype(float) >= 0.03) )]
+                ion_variants = ion_variants.loc[~((ion_variants['gene'] == 'SH2B3') &
+                                                  (ion_variants['# locus'].isin(['chr12:111885351','chr12:111885350'])))]
                 ion_variants = ion_variants.loc[~( (ion_variants['type'].isin(["SNV","FLT3ITD"])) &(ion_variants['genotype'] == "C/C") & ( ion_variants['gene'].isin(['ASXL1','FLT3'])))]
             if ion_variants.empty:
                 return pd.DataFrame({"Run": run_id, "Sample": sample, "Barcode": bar_code,
@@ -526,13 +547,12 @@ class myeloseq(object):
                 ["Run", "Sample", "Barcode", "Locus", "Genes", "Type", "Exon", "Transcript", "Coding", "Variant Effect", "Genotype",
                  "% Frequency", "ExAC_AF", "Amino Acid Change", "Read Counts", "Read/M", "AMAF", "GMAF", "EMAF","HS","Length","Coverage"]]
             logger.info("%s processed"%sample)
-            print("After filters are applied")
-            print(ion_variants.head(3).to_string())
+            logger.info("After filters are applied")
+            logger.info(ion_variants.head(3).to_string())
 
             return ion_variants.drop_duplicates(subset=['Sample','Barcode','Locus','Genes','Type'])
-            #return ion_variants
         else:
-            logger.warning("%s tsv file not found or errors occur while processing the tsv"%sample)
+            logger.warning("%s tsv file is not found or errors occur while processing the tsv"%sample)
 
     def rename_genes(self, row):
         try:
@@ -584,7 +604,7 @@ class myeloseq(object):
             logger.info("SC sample: %s" %sc_sample_name)
             for sample, barcode in zip(list(sample_sheet['sample_id']), list(sample_sheet['Bar code'])):
                 try:
-                    if sample == "" or sample == None: continue
+                    if sample == "" or sample == None or str(sample) == 'nan': continue
                     RESULTS.append(self.process_sample([sample,run_id,barcode,logging.getLogger(sample)]))
                 except:
                     pass
@@ -600,9 +620,9 @@ class myeloseq(object):
                     sc2_df['Read/M'] = sc2_df.apply(lambda x: 'NA' if (x['Type'] == "SNV" or x['Type'] == "INDEL") else x['Read/M'], axis=1)
                     sc2_df.to_csv("sc2_filtered_variants.tsv", index = False, sep = "\t")
                 sample_df = df.loc[~(df['Sample'].isin([sc_sample_name,sc2_sample_name]))]
-                # sample_df = sample_df.loc[~((sample_df['Genes'] == 'FLT3') &
-                #                       (sample_df['Type'] == 'FLT3ITD') &
-                #                      (sample_df['Genotype'] == 'C/C') )]
+                sample_df['bad'] = sample_df.apply(lambda x: self.empty_row(x), axis=1)
+                sample_df = sample_df.loc[sample_df['bad'] != 1]
+                sample_df.drop(columns=['bad'], inplace=True)
                 logger.info(sample_df.to_string())
                 self.write_to_excel(sample_df)
                 add_df = df.loc[~(df['Sample'].str.contains("SC-DNA|NC-DNA"))]
@@ -612,9 +632,6 @@ class myeloseq(object):
                                        '% Frequency':'Frequency','HS':'Info'})
                 add_df = add_df[['Sample','BC','Locus','Genes','Type','Exon','Transcript','Coding','Variant.Effect',
                                  'Genotype','Info','Length','Frequency','Amino.Acid.Change','AA','Coverage']]
-                # add_df = add_df.loc[~((add_df['Genes'] == 'FLT3') &
-                #                       (add_df['Type'] == 'FLT3ITD') &
-                #                      (add_df['Genotype'] == 'C/C') )]
                 print(add_df.head(3).to_string())
                 add_df.to_csv("%s.csv" % run_id, index=False, sep=",")
                 self._dropout.workbook = self.workbook

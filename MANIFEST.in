@@ -1,2 +1,4 @@
 graft tests
+exclude config/ion.conf
+exclude src/scripts/*.R
 global-exclude *.py[cod]
