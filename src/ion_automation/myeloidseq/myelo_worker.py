@@ -510,7 +510,8 @@ class myeloseq(object):
                                                    "Exon": 'NA', "Transcript": 'NA', "Coding": 'NA',
                                                    "Variant Effect": 'NA', 'Genotype': 'NA',
                                                    "% Frequency": "NA", "ExAC_AF": 'NA', "Amino Acid Change": 'NA',
-                                                   "Read Counts": 'NA', "Read/M": 'NA', "AMAF": 'NA', "GMAF": 'NA', "EMAF": 'NA',"HS":""},
+                                                   "Read Counts": 'NA', "Read/M": 'NA', "AMAF": 'NA', "GMAF": 'NA',
+                                                    "EMAF": 'NA',"HS":"NA","Length":'NA','Coverage':'NA'},
                                                   index=[0])
             new = ion_variants['ExAC_info'].str.split(":", n=2, expand=True)
             ion_variants.insert(0, "Run", run_id)
@@ -548,9 +549,22 @@ class myeloseq(object):
                  "% Frequency", "ExAC_AF", "Amino Acid Change", "Read Counts", "Read/M", "AMAF", "GMAF", "EMAF","HS","Length","Coverage"]]
             logger.info("%s processed"%sample)
             logger.info("After filters are applied")
+            ion_variants = ion_variants.drop_duplicates(subset=['Sample','Barcode','Locus','Genes','Type'])
+            ion_variants['bad'] = ion_variants.apply(lambda x: self.empty_row(x), axis=1)
+            ion_variants = ion_variants.loc[ion_variants['bad'] != 1]
             logger.info(ion_variants.head(3).to_string())
-
-            return ion_variants.drop_duplicates(subset=['Sample','Barcode','Locus','Genes','Type'])
+            ion_variants.drop(columns=['bad'], inplace=True)
+            if ion_variants.empty:
+                return pd.DataFrame({"Run": run_id, "Sample": sample, "Barcode": bar_code,
+                                 "Locus": 'negative', "Genes": 'NA', "Type": 'NA',
+                                 "Exon": 'NA', "Transcript": 'NA', "Coding": 'NA',
+                                 "Variant Effect": 'NA', 'Genotype': 'NA',
+                                 "% Frequency": "NA", "ExAC_AF": 'NA', "Amino Acid Change": 'NA',
+                                 "Read Counts": 'NA', "Read/M": 'NA', "AMAF": 'NA', "GMAF": 'NA', "EMAF": 'NA',
+                                 "HS": "NA","Length":"NA","Coverage":"NA"},
+                                index=[0])
+            else:
+                return ion_variants
         else:
             logger.warning("%s tsv file is not found or errors occur while processing the tsv"%sample)
 
@@ -620,9 +634,6 @@ class myeloseq(object):
                     sc2_df['Read/M'] = sc2_df.apply(lambda x: 'NA' if (x['Type'] == "SNV" or x['Type'] == "INDEL") else x['Read/M'], axis=1)
                     sc2_df.to_csv("sc2_filtered_variants.tsv", index = False, sep = "\t")
                 sample_df = df.loc[~(df['Sample'].isin([sc_sample_name,sc2_sample_name]))]
-                sample_df['bad'] = sample_df.apply(lambda x: self.empty_row(x), axis=1)
-                sample_df = sample_df.loc[sample_df['bad'] != 1]
-                sample_df.drop(columns=['bad'], inplace=True)
                 logger.info(sample_df.to_string())
                 self.write_to_excel(sample_df)
                 add_df = df.loc[~(df['Sample'].str.contains("SC-DNA|NC-DNA"))]
