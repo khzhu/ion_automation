@@ -19,25 +19,25 @@ process_SC_control <- function(x) {
   myelodata$locus<-paste0(myelodata$Genes,":", myelodata$Coding)
   sort(myelodata$locus)
   DNAqcdata<-subset(myelodata,  locus  %in% c (
-    "ABL1:c.944C>T",
-    "BRAF:c.1799T>A",
-    "CALR:c.1099_1150delCTTAAGGAGGAGGAAGAAGACAAGAAACGCAAAGAGGAGGAGGAGGCAGAGG",
-    "CBL:c.1139T>C",
-    "CBL:c.1259G>A",
-    "CEBPA:c.939_940insAAG",
-    "CSF3R:c.1853C>T",
-    "FLT3:c.1806_1807insGGGGCTTTCAGAGAATATGAATATGATCTCAAA",
-    "FLT3:c.2503G>T",
-    "FLT3:c.1799_1800insTAATGAGTACTTCTACGTTGATTTCAGAGAATATGAATATGA",
-    "IDH1:c.394C>T",
-    "JAK2:c.1624_1629delAATGAA",
-    "JAK2:c.1849G>T",
-    "MPL:c.1544G>T",
-    "NPM1:c.863_864insTCTG",
-    "SF3B1:c.2098A>G",
-    "SF3B1:c.1998G>T",
-    "SRSF2:c.284_307delCCCCGGACTCACACCACAGCCGCC",
-    "U2AF1:c.101C>T")  )
+  "ABL1:c.944C>T",
+  "BRAF:c.1799T>A",
+  "CALR:c.1099_1150delCTTAAGGAGGAGGAAGAAGACAAGAAACGCAAAGAGGAGGAGGAGGCAGAGG",
+  "CBL:c.1139T>C",
+  "CBL:c.1259G>A",
+  "CEBPA:c.937_939dup",
+  "CSF3R:c.1853C>T",
+  "FLT3:c.1759_1800dup",
+  "FLT3:c.2503G>T",
+  "FLT3:c.1806_1807insGGGGCTTTCAGAGAATATGAATATGATCTCAAA",
+  "IDH1:c.394C>T",
+  "JAK2:c.1624_1629delAATGAA",
+  "JAK2:c.1849G>T",
+  "MPL:c.1544G>T",
+  "NPM1:c.863_864insTCTG",
+  "SF3B1:c.2098A>G",
+  "SF3B1:c.1998G>T",
+  "MIR636,SRSF2:c.284_307delCCCCGGACTCACACCACAGCCGCC",
+  "U2AF1,U2AF1L5:c.-8623C>T, c.101C>T")  )
   DNAqcdata$locus<- gsub("CALR:c.1099_1150delCTTAAGGAGGAGGAAGAAGACAAGAAACGCAAAGAGGAGGAGGAGGCAGAGG","CALR:c.1099_1150del", DNAqcdata$locus)
   DNAqcdata$locus<- gsub("FLT3:c.1806_1807insGGGGCTTTCAGAGAATATGAATATGATCTCAAA","FLT3:c.1806_1807ins33", DNAqcdata$locus)
   DNAqcdata$locus<- gsub("FLT3:c.1799_1800insTAATGAGTACTTCTACGTTGATTTCAGAGAATATGAATATGA","FLT3:c.1799_1800ins42", DNAqcdata$locus)
@@ -83,10 +83,10 @@ QCplot
 dev.off()
 ####### process SNP QC ##############
 #read unfilted TSV files
-files_to_read <- list.files(path="/home/ionadmin/myeloseq_report/Variants", pattern = "_Non-Filtered.*-oncomine\\.tsv$", recursive = TRUE)
+files_to_read <- list.files(path=paste(getwd(),"Variants",sep="/"), pattern = "_Non-Filtered.*-oncomine\\.tsv$", recursive = TRUE)
 #Read all tsv files in directory
 all_files <- lapply(files_to_read,function(x) {
-  read.csv(file = paste("/home/ionadmin/myeloseq_report/Variants",x,sep="/"), quote="", sep = '\t', header = TRUE, skip=2)
+  read.csv(file = paste(getwd(),"Variants",x,sep="/"), quote="", sep = '\t', header = TRUE, skip=2)
 })
 #Combine file content list and file name list
 all_lists <- mapply(c, files_to_read,all_files, SIMPLIFY = FALSE)
@@ -109,8 +109,14 @@ data0$X..Frequency<-gsub("NA","",data0$X..Frequency)
 data0 <- data0[,c("Sample","Locus","X..Frequency")]
 data0 <- distinct(data0)
 res.targeloci<-subset(data0, Locus  %in% snps)
-data.e<-spread(res.targeloci, Sample, X..Frequency)
-data.e[is.na(data.e)] <- 0
+data.e <- pivot_wider(
+  res.targeloci,
+  names_from = "Sample",
+  values_from = "X..Frequency",
+  values_fn = list(X..Frequency= list)) %>%
+  unchop(everything())
+#data.e<-spread(res.targeloci, Sample, X..Frequency)
+data.e[is.na(data.e)] <- "0"
 write.csv(data.e, file=paste("QC-SNPs-final-",run_id,".csv",sep=""), row.names=FALSE)
 write.csv(combined_final, file=paste("combined_final_",run_id,".csv",sep=""), row.names=FALSE)
 #imbalancefusion<-subset(combined_final,  (grepl(glob2rx("5p3pAssays") , X.rowtype.) )
@@ -130,14 +136,14 @@ expQC<- ggplot(expcontrol, aes(y=log2(as.numeric(as.character(X.INFO...READ_COUN
   ggtitle(paste("Case Expression Control Myeloid QC_",run_id,sep="")) +
   guides(col = guide_legend ( ncol=1 )) +
   theme(legend.text=element_text(size=7))
-pdf(paste("Case Expression Control Myeloid QC_",run_id,".pdf",sep=""))
+pdf(paste("Case_Expression_Control_Myeloid_QC_",run_id,".pdf",sep=""))
 expQC
 dev.off()
 ## process filtered full TSV file #######
-tsv_files_to_read <- list.files(path="/home/ionadmin/myeloseq_report/Variants", pattern = "-full.tsv$", recursive = TRUE)
+tsv_files_to_read <- list.files(path=paste(getwd(),"Variants",sep="/"), pattern = "-full.tsv$", recursive = TRUE)
 #Read all tsv files in directory
 tsv_files <- lapply(tsv_files_to_read,function(x) {
-  read.csv(file = paste("/home/ionadmin/myeloseq_report/Variants",x,sep="/"), quote="", sep = '\t', header = TRUE, skip=2)
+  read.csv(file = paste(getwd(),"Variants",x,sep="/"), quote="", sep = '\t', header = TRUE, skip=2)
 })
 #Combine file content list and file name list
 content_lists <- mapply(c, tsv_files_to_read,tsv_files, SIMPLIFY = FALSE)
@@ -148,9 +154,6 @@ names(filtered_result)[1] <- "Sample"
 #Shorten Sample name by removing all characters after the first underscore
 filtered_result$Sample<-gsub("_.*","",filtered_result$Sample)
 #List of locus
-#snps <- read.csv("/home/ionadmin/myeloseq_report/data/ONCsolid.SNP_locus.csv")
-#snps <- read.csv("//Volumes/molecular/Molecular/IonTorrent/myeloseqer_test/QC_data/Myeloid.SNP_locus.csv")
-#snps <- snps$Locus
 #add the 2 CNV number replacing the VAF
 combined_tsv <- distinct(filtered_result)
 combined_tsv <- as.data.frame(sapply(filtered_result, function(x) gsub("\"", "", x)))

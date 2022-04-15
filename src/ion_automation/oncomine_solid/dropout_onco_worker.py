@@ -1,31 +1,21 @@
-"""dropout_worker.py: Automated workflow for oncomine myeloid assay."""
+"""dropout_worker.py: Automated workflow for oncomine focus assay."""
 __author__      = "Kelsey Zhu"
 __copyright__   = "Copyright 2022, Langone Pathlab"
 __version__ = "1.0.1"
 
 import pandas as pd
 import os
-import configparser
 import glob
+import configparser
 import re
 
 class dropout(object):
     def __init__(self, conf_file):
         config = configparser.ConfigParser()
         config.read(conf_file)
-        self.WORK_DIR = config['MYELOSEQ']['MYELOSEQ_HOME']
-        self.DROPOUT_DIR = config['MYELOSEQ']['DROPOUT_DIR']
-        self.TARGET_BED = config['MYELOSEQ']['TARGET_BED']
-        self.REFSEQ = config['MYELOSEQ']['REFSEQ']
-        self.TRANS_LOOKUP = config['MYELOSEQ']['TRANS_LOOKUP']
-        self.STYLE_CSS = config['MYELOSEQ']['STYLE_CSS']
-        # read data files
-        self.target_bed = pd.read_csv(self.TARGET_BED, sep="\t", skiprows=1)
-        self.target_bed.drop_duplicates(subset=['target'], inplace=True)
-        self.refseq_df = pd.read_csv(self.REFSEQ, sep="\t", skiprows=0)
-        self.myeloseq_trans = pd.read_csv(self.TRANS_LOOKUP, sep="\t", skiprows=0)
-        self.myeloseq_trans["Transcript"] = self.myeloseq_trans["Transcript"].str.split(".", n=1, expand=True)
-        self.myeloseq_refseq = self.refseq_df.merge(self.myeloseq_trans, left_on='name', right_on='Transcript', how='inner')
+        self.WORK_DIR = config['SOLID']['HOME_DIR']
+        self.DROPOUT_DIR = config['SOLID']['DROPOUT_DIR']
+        self.STYLE_CSS = config['DEFAULT']['STYLE_CSS']
         self._workbook = None
 
     @property
@@ -38,10 +28,10 @@ class dropout(object):
 
     def get_chip_samples(self, sample_sheet, chip=1):
         sample_sheet = pd.read_excel(sample_sheet, engine='openpyxl', sheet_name='DNA', skiprows=5)
-        sample_sheet = sample_sheet[['Bar code', 'Accession #', 'DNA #', 'Chip #']]
-        sample_sheet.dropna(subset=['Bar code', 'Chip #'], inplace=True)
+        sample_sheet = sample_sheet[['Bar code', 'Accession #', 'DNA #', 'Chip # \n1 or 2']]
+        sample_sheet.dropna(subset=['Bar code', 'Chip # \n1 or 2'], inplace=True)
         sample_sheet = sample_sheet[sample_sheet['Accession #'].notna()]
-        sample_sheet['Chip #'] = sample_sheet['Chip #'].astype('int64')
+        sample_sheet['Chip #'] = sample_sheet['Chip # \n1 or 2'].astype('int64')
         sample_sheet = sample_sheet[sample_sheet['Chip #'] == int(chip)]
         sample_sheet['Bar code'] = sample_sheet['Bar code'].astype('int64')
         sample_sheet['sample_id'] = sample_sheet['Accession #'] + "-" + sample_sheet['DNA #']
@@ -61,34 +51,16 @@ class dropout(object):
                 return n
         return None
 
-    def get_refseq_trans(self, row):
-        for idx, mrow in self.myeloseq_refseq.iterrows():
-            if row['Gene'] != mrow['name2'] or row['end'] < mrow['cdsStart'] or row['start'] > mrow['cdsEnd']: continue
-            if row['start'] >= mrow['cdsStart'] and row['end'] <= mrow['cdsEnd'] or \
-                row['end'] >= mrow['cdsStart'] and row['start'] <= mrow['cdsStart'] or \
-                    row['start'] <= mrow['cdsEnd'] and row['end'] >= mrow['cdsStart']:
-                return mrow['name']
-            else:
-                return None
-
     def remove_zeros(self, df):
         drop_cols = df.columns[(df == 0).sum() > 0.25 * df.shape[1]]
         df.drop(drop_cols, axis=1, inplace=True)
         return df
 
-    def make_clickable(self, row):
-        if row['Transcript_ID'] == None:
-            name =  row['Gene']
-        else:
-            name = row['Transcript_ID']
-        return '<a target="_blank" href="https://genome.ucsc.edu/cgi-bin/hgTracks?org=human&position={0}&db=hg19">{1}</a>'.format(
-                        "%s:%s-%s"%(row['chrom'],row['start'],row['end']), name)
-
     def get_run_id(self):
         header = pd.read_excel(self.workbook, engine='openpyxl', sheet_name='DNA', nrows=1, skiprows=2)
         return list(header.columns.values)[2].replace("-DNA", "")
 
-    def process_dropout(self, df_sheet_all, chip=1):
+    def process_dropout(self, df_sheet_all, chip):
         df_sheet_all = self.remove_zeros(df_sheet_all)
         sample_sheet = self.get_chip_samples(self.workbook, chip)
         df_sheet_all.sort_index(inplace=True, axis=1)
@@ -103,15 +75,7 @@ class dropout(object):
         df_sheet_all = df_sheet_all.loc[df_sheet_all["filter"] == "FAIL"]
         df_sheet_all.drop(['filter'], axis=1, inplace=True)
         df_sheet_all.reset_index(inplace=True)
-        anno_amp_df = self.target_bed.merge(df_sheet_all,left_on='target', right_on='Target',how='inner')
-        anno_amp_df.insert (4, "Hotspot", anno_amp_df.apply(lambda x: 'yes' if 'Hotspot' in x['info'] else 'no', axis=1))
-        anno_amp_df.drop(['target', 'strand','info'], axis=1, inplace=True)
-        self.myeloseq_refseq.sort_values(by=['cdsStart','cdsEnd'],inplace=True)
-        anno_amp_df.sort_values(by=['start','end'],inplace=True)
-        anno_amp_df.insert (5, "Transcript_ID", anno_amp_df.apply(lambda x: self.get_refseq_trans(x), axis=1))
-        anno_amp_df.insert(6, "Transcript", anno_amp_df.apply(lambda x: self.make_clickable(x), axis=1))
-        anno_amp_df.rename(columns={'chrom':'Chrom','start':'Start','end':'End'}, inplace=True)
-        return anno_amp_df
+        return df_sheet_all
 
     def shift_row_to_top(self, df, row_to_shift):
         """Shift row, given by row_to_shift, to top of df."""
@@ -132,9 +96,8 @@ class dropout(object):
   </body>
 </html>
 """%self.STYLE_CSS
-
         run_id = self.get_run_id()
-        dropout_files = glob.glob(os.path.join(self.DROPOUT_DIR, run_id, "Auto_%s*.bcmatrix.xls*"%run_id))
+        dropout_files = glob.glob(os.path.join(self.DROPOUT_DIR,"Auto_%s*.bcmatrix.xls*"%run_id))
         anno_amp_df_list = list()
         for dropout_file in dropout_files:
             try:
@@ -142,34 +105,31 @@ class dropout(object):
                 chip = m.group(1)
             except:
                 chip = 1
-            dropout = pd.read_table(os.path.join(self.DROPOUT_DIR,run_id,dropout_file))
+            #dropout_file = glob.glob(os.path.join(self.DROPOUT_DIR,"Auto_%s_*.bcmatrix.xls"%run_id))[0]
+            dropout = pd.read_table(dropout_file)
             anno_amp_df = self.process_dropout(dropout, chip)
-            anno_amp_df.set_index(['Chrom', 'Start','End','Hotspot','Gene','Transcript',
-                                   'Transcript_ID','Target'], inplace=True)
+            anno_amp_df.set_index(['Gene', 'Target'], inplace=True)
             anno_amp_df = anno_amp_df.apply(lambda x: x)
             anno_amp_df_list.append(anno_amp_df)
 
-        if len(anno_amp_df_list) > 1:
+        if len(anno_amp_df_list) == 2:
             result = anno_amp_df_list[0].join(anno_amp_df_list[1], how='outer')
         else:
             result = anno_amp_df_list[0]
-
+        # anno_amp_df.set_index(['Gene','Target'], inplace=True)
+        # result = anno_amp_df.apply(lambda x: x)
         result[result > 500] = 0
         result = result.fillna(0)
-        result.loc[('Total Number of Drop-outs', '0','0','no','NA','NA',
-                                   'NA','NA')] = result.apply(lambda x: len(x[x > 1]))
         result = result.astype(int)
+        counts = result.apply(lambda x: len(x[x > 1]))
         result.reset_index(inplace=True)
+        result.loc[result.shape[0]] = ['Total # Dropouts', ''] + counts.tolist()
         result = self.shift_row_to_top(result, result.shape[0] - 1)
         pd.set_option('colheader_justify', 'center')
 
         # OUTPUT AN HTML FILE
         res = result.copy()
-        res = res.drop(columns=['Transcript_ID'])
         with open(os.path.join(self.WORK_DIR, "%s-dropouts.html"%run_id), 'w') as f:
             f.write(HTML_STR.format(table=res.to_html(classes='mystyle',escape=False, index=False)))
-
-        result.drop(columns=['Transcript'],inplace=True)
         result.to_csv(os.path.join(self.WORK_DIR,"%s-dropouts.tsv"%run_id), sep="\t", index=False)
-
 

@@ -1,4 +1,3 @@
-#Import libraries
 library(dplyr)
 library(tidyr)
 library(data.table)
@@ -107,7 +106,6 @@ data0$X..Frequency<-paste0(data0$X.INFO.A.AF., data0$X.INFO...CI.)
 data0$Locus <- paste(data0$X.CHROM.,data0$X.POS.,sep = ":")
 data0$X..Frequency<-gsub("NA","",data0$X..Frequency)
 data0 <- data0[,c("Sample","Locus","X..Frequency")]
-data0 = data0[!duplicated(data0$Locus),]
 res.targeloci<-subset(distinct(data0), Locus  %in% snps)
 data.e<-spread(res.targeloci, Sample, X..Frequency)
 data.e[is.na(data.e)] <- 0

@@ -1,7 +1,13 @@
+"""myelo_worker.py: Automated workflow for oncomine myeloid assay."""
+__author__      = "Kelsey Zhu"
+__copyright__   = "Copyright 2022, Langone Pathlab"
+__version__ = "1.0.1"
+
 import requests
 import os
 import glob
 import pandas as pd
+import numpy as np
 import re
 import ast
 from time import time
@@ -122,6 +128,12 @@ class myeloseq(object):
         except:
             return False
 
+    def is_mnv(self, row):
+        try:
+            return "[" in row['protein'] or "," in row['protein'] or ";" in row['protein']
+        except:
+            return False
+
     def get_download_link(self, sample):
         try:
             params = {'name': "%s_v1" % sample}
@@ -149,6 +161,10 @@ class myeloseq(object):
                        glob.glob(os.path.join(file_path, "%s*_Non-Filtered_*-oncomine.tsv" % sample_pair))[0]
         except:
             return None, None, None
+
+    def clean_up(self):
+        rm_downloads_cmd = 'echo %s | sudo -S rm -f %s/*.zip' % (self.UID, os.path.join(self.DEST_PATH, "downloads"))
+        os.system(rm_downloads_cmd)
 
     def copy_files(self, run_id):
         logger.info("Generating QC plots...")
@@ -183,6 +199,10 @@ class myeloseq(object):
             os.system(sc2_cp_cmd)
         # copy varaint tsv/vcf files over to the Z drive
         logger.info("Copying variant files over to the Z drive")
+        if os.path.exists(os.path.join(self.DEST_PATH, "downloads/%s" % run_id)):
+            rm_cmd = 'echo %s | sudo -S rm -rf %s' % (self.UID,
+                                            os.path.join(self.DEST_PATH, "downloads/%s" % run_id))
+            os.system(rm_cmd)
         cp_var_cmd = 'echo %s | sudo -S cp -r %s %s' % (self.UID, self.VAR_HOME,
                     os.path.join(self.DEST_PATH, "downloads/%s" % run_id))
         os.system(cp_var_cmd)
@@ -191,8 +211,7 @@ class myeloseq(object):
         rm_outfiles_cmd = 'echo %s | sudo -S rm -f %s/*.csv %s/*.pdf %s/*.xlsx %s/*.tsv %s/*.html'%(self.UID,
                 self.MYELOSEQ_HOME,self.MYELOSEQ_HOME, self.MYELOSEQ_HOME, self.MYELOSEQ_HOME, self.MYELOSEQ_HOME)
         os.system(rm_outfiles_cmd)
-        rm_downloads_cmd = 'echo %s | sudo -S rm -f %s/*.zip' % (self.UID, os.path.join(self.DEST_PATH, "downloads"))
-        os.system(rm_downloads_cmd)
+        self.clean_up()
 
     def write_to_excel(self, df):
         try:
@@ -328,30 +347,27 @@ class myeloseq(object):
 
     def get_codon_code(self, AA_change):
         try:
-            AA_change = AA_change.replace("p.","")
-            if "fs" in AA_change:
-                m = re.search(r'([A-Za-z]+)([0-9]+)([A-Za-z]+)fs(\w+)', AA_change)
-                return "p.%s%s%sfs%s" %(self.get_codon_letter(m.group(1)),
-                                        m.group(2),
-                                        self.get_codon_letter(m.group(3)),
-                                        m.group(4))
-            elif "del" in AA_change and "_" not in AA_change:
-                m = re.search(r'([A-Za-z]+)([0-9]+)del', AA_change)
-                return "p." + self.get_codon_letter(m.group(1)) + m.group(2) + "del"
-            elif "del" in AA_change and "_" in AA_change:
-                m = re.search(r'([A-Za-z]+)([0-9]+)_([A-Za-z]+)([0-9]+)del', AA_change)
-                return "p." + self.get_codon_letter(m.group(1)) + m.group(2) + "_" + self.get_codon_letter(m.group(3)) + m.group(4) + "del"
-            elif "ins" in AA_change:
-                #p.Tyr599_Asp600insSerThrTyrAspPheArgGluTyrGluTyr
-                m = re.search(r'([A-Za-z]+)([0-9]+)_([A-Za-z]+)([0-9]+)ins(\w+)', AA_change)
-                ins_str = ''
-                for a in re.findall('...', m.group(5)):
-                    ins_str += self.get_codon_letter(a)
-                return "p." + self.get_codon_letter(m.group(1)) + m.group(2) + "_" + self.get_codon_letter(m.group(3)) + m.group(
-                    4) + "ins" + ins_str
-            else:
-                m = re.search(r'([A-Za-z]+)([0-9]+)([A-Za-z]+)', AA_change)
-                return "p." + self.get_codon_letter(m.group(1)) + m.group(2) + self.get_codon_letter(m.group(3))
+            return AA_change.replace("Ala", "A") \
+                             .replace("Arg", "R") \
+                             .replace("Asn", "N") \
+                             .replace("Asp", "D") \
+                             .replace("Cys", "C") \
+                             .replace("Gln", "Q") \
+                             .replace("Glu", "E") \
+                             .replace("Gly", "G") \
+                             .replace("His", "H") \
+                             .replace("Ile", "I") \
+                             .replace("Leu", "L") \
+                             .replace("Lys", "K") \
+                             .replace("Met", "M") \
+                             .replace("Phe", "F") \
+                             .replace("Pro", "P") \
+                             .replace("Ser", "S") \
+                             .replace("Thr", "T") \
+                             .replace("Trp", "W") \
+                             .replace("Tyr", "Y") \
+                             .replace("Val", "V") \
+                             .replace("Ter", "X")
         except:
             return AA_change
 
@@ -426,6 +442,8 @@ class myeloseq(object):
                     ion_fusions['fusion_key'] = ion_fusions.apply(lambda x: self.get_vcf_fusion_key(x), axis=1)
                     ion_fusions['Read Counts'] = ion_fusions.apply(lambda x: self.get_fusion_read_counts(x), axis=1)
                     ion_fusions['Read/M'] = ion_fusions.apply(lambda x: self.get_fusion_RPM(x), axis=1)
+                    ion_fusions['Read/M'] = ion_fusions['Read/M'].astype(float)
+                    ion_fusions['Read/M'] = ion_fusions['Read/M'].apply(np.int64)
                     ion_fusions = ion_fusions[['fusion_key',"Read Counts","Read/M"]]
                     ion_fusions = ion_fusions.loc[ion_fusions["Read Counts"].astype(int) >= 15]
                     print (ion_fusions.to_string())
@@ -445,8 +463,10 @@ class myeloseq(object):
             ion_variants['artifact'] = ion_variants.apply(lambda x: self.is_artifact(x), axis=1)
             ion_variants['function'] = ion_variants.apply(lambda x: self.remove_function_bar(x), axis=1)
             ion_variants['splice_site'] = ion_variants.apply(lambda x: self.get_location(x), axis=1)
+            ion_variants['MNV'] = ion_variants.apply(lambda x: "MNV" if self.is_mnv(x) else "", axis=1)
 
             ion_variants_snv = ion_variants.loc[ (ion_variants['HS'] == 'yes') | (ion_variants['type'] == 'FLT3ITD') |
+                                    (ion_variants['MNV'] == 'MNV') |
                                     ((ion_variants['type'].isin(self.VAR_TYPES))
                                     & (ion_variants['function'].isin(self.INCL_FUNCS) | ion_variants['splice_site'].isin(self.LOCATIONS))
                                     & ((ion_variants['MAF'].isnull()) |(ion_variants['MAF'].astype(float) <= 0.01))
@@ -602,6 +622,7 @@ class myeloseq(object):
             return row[colname]
 
     def start(self):
+        self.clean_up()
         RESULTS = list()
         try:
             ts = time()
