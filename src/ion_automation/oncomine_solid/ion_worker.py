@@ -1,7 +1,7 @@
 """ion_worker.py: Automated workflow for oncomine focus assay."""
 __author__      = "Kelsey Zhu"
 __copyright__   = "Copyright 2022, Langone Pathlab"
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 import requests
 import os

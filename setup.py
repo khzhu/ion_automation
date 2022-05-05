@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="ion_automation",
-    version="1.0.1",
+    version="1.0.2",
     author="Kelsey Zhu",
     author_email="khzhu@@users.noreply.github.com",
     description="Automated workflow for Oncomine Precision Assay NGS sequencing data",
