@@ -147,10 +147,17 @@ class oncomine_solid(object):
 
     def get_download_link(self, sample):
         try:
-            params = {'name': "%s_v1"%sample}
-            headers = { 'Content-Type':"application/x-www-form-urlencoded", 'Authorization' : self.TOKEN}
-            r = requests.get('https://%s/api/v1/getvcf'%self.HOST, headers=headers, params=params, verify=False)
-            return str(r.json()[0]['data_links']).split("filePath=")[1]
+            headers = {'Content-Type': "application/x-www-form-urlencoded", 'Authorization': self.TOKEN}
+            i = 1
+            res = None
+            params = {'name': "%s_v%s" % (sample, i)}
+            r = requests.get('https://%s/api/v1/getvcf' % self.HOST, headers=headers, params=params, verify=False)
+            while str(r) == "<Response [200]>":
+                res = r
+                i += 1
+                params = {'name': "%s_v%s" % (sample, i)}
+                r = requests.get('https://%s/api/v1/getvcf' % self.HOST, headers=headers, params=params, verify=False)
+            return str(res.json()[0]['data_links']).split("filePath=")[1]
         except:
             return None
 
@@ -214,8 +221,8 @@ class oncomine_solid(object):
         os.system(cp_var_cmd)
         rm_var_cmd = 'echo %s | sudo -S rm -rf %s/*'%(self.UID, self.VAR_DIR)
         os.system(rm_var_cmd)
-        rm_outfiles_cmd = 'echo %s | sudo -S rm -f %s/*.csv %s/*.pdf %s/*.xlsx %s/*.tsv'%(self.UID, self.HOME_DIR,
-                                                                    self.HOME_DIR,self.HOME_DIR, self.HOME_DIR)
+        rm_outfiles_cmd = 'echo %s | sudo -S rm -f %s/*.csv %s/*.pdf %s/*.xlsx %s/*.tsv %s/*.html'%(self.UID, self.HOME_DIR,
+                                                        self.HOME_DIR,self.HOME_DIR, self.HOME_DIR,self.HOME_DIR)
         os.system(rm_outfiles_cmd)
         self.clean_up()
 

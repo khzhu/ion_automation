@@ -136,10 +136,17 @@ class myeloseq(object):
 
     def get_download_link(self, sample):
         try:
-            params = {'name': "%s_v1" % sample}
             headers = {'Content-Type': "application/x-www-form-urlencoded", 'Authorization': self.TOKEN}
+            i = 1
+            res = None
+            params = {'name': "%s_v%s" % (sample,i)}
             r = requests.get('https://%s/api/v1/getvcf' % self.HOST, headers=headers, params=params, verify=False)
-            return str(r.json()[0]['data_links']).split("filePath=")[1]
+            while str(r) == "<Response [200]>":
+                res = r
+                i += 1
+                params = {'name': "%s_v%s" % (sample, i)}
+                r = requests.get('https://%s/api/v1/getvcf' % self.HOST, headers=headers, params=params, verify=False)
+            return str(res.json()[0]['data_links']).split("filePath=")[1]
         except:
             return None
 
