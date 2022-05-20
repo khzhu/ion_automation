@@ -144,7 +144,7 @@ class dropout(object):
                 chip = 1
             dropout = pd.read_table(os.path.join(self.DROPOUT_DIR,run_id,dropout_file))
             anno_amp_df = self.process_dropout(dropout, chip)
-            anno_amp_df.set_index(['Chrom', 'Start','End','Hotspot','Gene','Transcript',
+            anno_amp_df.set_index(['Chromosome', 'Start','End','Hotspot','Gene','Transcript',
                                    'Transcript_ID','Target'], inplace=True)
             anno_amp_df = anno_amp_df.apply(lambda x: x)
             anno_amp_df_list.append(anno_amp_df)

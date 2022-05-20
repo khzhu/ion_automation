@@ -521,10 +521,10 @@ class oncomine_solid(object):
                                               list(sample_sheet['Bar code']),
                                               list(sample_sheet['%T'])):
                 try:
-                    if barcode == "" or barcode == None: continue
+                    if sample == "" or sample == None or str(sample) == 'nan': continue
                     RESULTS.append(self.process_sample([sample,run_id,barcode,tumor_pct,logging.getLogger(sample)]))
                 except:
-                    continue
+                    pass
             if RESULTS and len(RESULTS) > 0:
                 df = pd.concat(RESULTS)
                 sc_df = df.loc[df['Sample'] == sc_sample_name]
@@ -541,10 +541,11 @@ class oncomine_solid(object):
                 add_df = add_df[['Sample','BC','Locus','Genes','Type','Exon','Transcript','Coding','Variant.Effect',
                                  'Genotype','Info','Length','Frequency','Amino.Acid.Change','AA','Coverage']]
                 add_df.to_csv("%s.csv" % run_id, index=False, sep=",")
-
-                self._dropout.workbook = self.workbook
-                self._dropout.start()
-
+                try:
+                    self._dropout.workbook = self.workbook
+                    self._dropout.start()
+                except:
+                    pass
                 self.write_to_excel(sample_df)
                 logger.info('Took %s seconds to process samples', time() - ts)
         except Exception as e:
