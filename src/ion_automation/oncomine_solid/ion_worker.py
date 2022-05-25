@@ -381,10 +381,13 @@ class oncomine_solid(object):
             return AA_change
 
     def get_AA_Change(self, row):
-        if isinstance(row['Amino Acid Change'], str):
-            aa_change = row['Amino Acid Change'].split("|")[0]
-            return self.get_codon_code(aa_change)
-        else:
+        try:
+            if isinstance(row['Amino Acid Change'], str):
+                aa_change = row['Amino Acid Change'].split("|")[0]
+                return self.get_codon_code(aa_change)
+            else:
+                return 'NA'
+        except:
             return 'NA'
 
     def process_sample(self, args):
@@ -467,8 +470,9 @@ class oncomine_solid(object):
                                                    "Variant Effect": 'NA', 'Genotype': 'NA', 'Hotspot':'NA',
                                                    "% Frequency": "NA", "ExAC_AF": 'NA', "Amino Acid Change": 'NA',
                                                    "AA": "NA", "Read Counts": 'NA', "Read/M": 'NA', "Copy Number": 'NA',
-                                                   "CNV Confidence": 'NA', "Coverage": 'NA', "Length": 'NA', "%T":'NA'},
-                                                  index=[0])
+                                                   "CNV Confidence": 'NA', "Coverage": 'NA', "Length": 'NA',
+                                                   "%T":str(int(tumor_pct))}, index=[0])
+
             ion_variants.drop(columns=['ExAC_info', 'go', '5000Exomes', 'hrun', 'drugbank',
                                                'fusion_presence', 'ratio_to_wild_type',
                                                'norm_count_within_gene', 'iscn', 'filter',
