@@ -57,6 +57,9 @@ class oncomine_solid(object):
         except:
             return None
 
+    def __del__(self):
+        self._workbook = None
+
     def get_AF(self, row):
         try:
             m = re.search(r'AF=(.+);AO=.*;TYPE=(.*);VARB=(.*);HS;.*', row['INFO'])
@@ -506,7 +509,7 @@ class oncomine_solid(object):
         else:
             logger.warning("%s tsv file not found"%sample)
 
-    def run(self):
+    def start(self):
         self.clean_up()
         RESULTS = list()
         try:

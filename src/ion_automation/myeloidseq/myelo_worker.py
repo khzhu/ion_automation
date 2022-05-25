@@ -56,6 +56,9 @@ class myeloseq(object):
     def workbook(self, value):
         self._workbook = value
 
+    def __del__(self):
+        self._workbook = None
+
     def get_coverage(self, row):
         try:
             m = re.search(r'.*;DP=([0-9]+);.*', row['INFO'])
