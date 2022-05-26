@@ -1,5 +1,6 @@
 __author__ = "Kelsey Zhu"
-__version__ = "1.0.2"
+__copyright__   = "Copyright 2022, Langone Pathlab"
+
 import time
 from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEventHandler

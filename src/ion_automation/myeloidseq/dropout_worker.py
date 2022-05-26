@@ -1,7 +1,6 @@
 """dropout_worker.py: Automated workflow for oncomine myeloid assay."""
 __author__      = "Kelsey Zhu"
 __copyright__   = "Copyright 2022, Langone Pathlab"
-__version__ = "1.0.2"
 
 import pandas as pd
 import os

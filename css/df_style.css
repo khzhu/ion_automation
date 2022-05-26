@@ -1,0 +1,188 @@
+/* includes alternating gray and white with on-hover color */
+
+.mystyle {
+    border-collapse: collapse;
+    margin: 15px 0;
+    font-size: 0.8em;
+    font-family: sans-serif;
+    min-width: 400px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
+}
+
+.mystyleoutter { overflow-x: scroll; }
+
+.mystyle table {
+  position: relative;
+  overflow: auto;
+  white-space: nowrap;
+}
+
+.mystyle thead tr {
+    background-color: #009879;
+    color: black;
+    text-align: left;
+    font-width: bold;
+    font-size: 0.8em;
+}
+
+.mystyle td, th {
+    padding: 3px;
+    padding-left: 15px;
+    padding-right: 5px;
+    min-width: 100px;
+}
+
+th:nth-child(1) {
+  position: -webkit-sticky;
+  position: sticky;
+  background-color: #009879;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  left: 0px;
+}
+
+th:nth-child(2) {
+  position: -webkit-sticky;
+  position: sticky;
+  background-color: #009879;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  left: 100px;
+}
+
+th:nth-child(3) {
+  position: -webkit-sticky;
+  position: sticky;
+  background-color: #009879;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  left: 200px;
+}
+th:nth-child(4) {
+  position: -webkit-sticky;
+  position: sticky;
+  background-color: #009879;
+  width: 80px;
+  min-width: 80px;
+  max-width: 100px;
+  left: 300px;
+}
+th:nth-child(5) {
+  position: -webkit-sticky;
+  position: sticky;
+  background-color: #009879;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  left: 400px;
+}
+th:nth-child(6) {
+  position: -webkit-sticky;
+  position: sticky;
+  background-color: #009879;
+  width: 120px;
+  min-width: 120px;
+  max-width: 120px;
+  left: 500px;
+}
+th:nth-child(7) {
+  position: -webkit-sticky;
+  position: sticky;
+  background-color: #009879;
+  width: 120px;
+  min-width: 120px;
+  max-width: 120px;
+  left: 600px;
+}
+td:nth-child(1) {
+  position: -webkit-sticky;
+  position: sticky;
+  background-color: #edf3f3;
+  width: 120px;
+  min-width: 120px;
+  max-width: 120px;
+  left: 0px;
+}
+
+td:nth-child(2) {
+  position: -webkit-sticky;
+  position: sticky;
+  background-color: #edf3f3;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  left: 100px;
+}
+
+td:nth-child(3) {
+  position: -webkit-sticky;
+  position: sticky;
+  background-color: #edf3f3;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  left: 200px;
+}
+td:nth-child(4) {
+  position: -webkit-sticky;
+  position: sticky;
+  background-color: #edf3f3;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  left: 300px;
+}
+td:nth-child(5) {
+  position: -webkit-sticky;
+  position: sticky;
+  background-color: #edf3f3;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  left: 400px;
+}
+td:nth-child(6) {
+  position: -webkit-sticky;
+  position: sticky;
+  background-color: #edf3f3;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  left: 500px;
+}
+td:nth-child(7) {
+  position: -webkit-sticky;
+  position: sticky;
+  background-color: #edf3f3;
+  width: 120px;
+  min-width: 120px;
+  max-width: 120px;
+  left: 600px;
+}
+.mystyle tbody tr {
+    border-bottom: 1px solid #dddddd;
+}
+
+.mystyle tbody tr:nth-of-type(1) {
+    background-color: #FAFAD2;
+}
+
+.mystyle tbody tr:last-of-type {
+    border-bottom: 2px solid #009879;
+}
+
+.mystyle tr:nth-child(even) {
+    background: #F3F3F3;
+}
+
+.mystyle tr:hover {
+    background: silver;
+    cursor: pointer;
+}
+.mystyle tbody tr.active-row {
+    font-weight: bold;
+    color: #a096c6;
+}

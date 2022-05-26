@@ -6,4 +6,4 @@ if len(sys.argv) != 2:
 else:
     ion_worker = oncomine_solid("/home/ionadmin/ion_config.conf")
     ion_worker.workbook = sys.argv[1]
-    ion_worker.run()
+    ion_worker.start()

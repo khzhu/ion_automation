@@ -1,7 +1,6 @@
 """dropout_worker.py: Automated workflow for oncomine focus assay."""
 __author__      = "Kelsey Zhu"
 __copyright__   = "Copyright 2022, Langone Pathlab"
-__version__ = "1.0.2"
 
 import pandas as pd
 import os
@@ -105,7 +104,7 @@ class dropout(object):
                 chip = m.group(1)
             except:
                 chip = 1
-            #dropout_file = glob.glob(os.path.join(self.DROPOUT_DIR,"Auto_%s_*.bcmatrix.xls"%run_id))[0]
+
             dropout = pd.read_table(dropout_file)
             anno_amp_df = self.process_dropout(dropout, chip)
             anno_amp_df.set_index(['Gene', 'Target'], inplace=True)
@@ -116,8 +115,7 @@ class dropout(object):
             result = anno_amp_df_list[0].join(anno_amp_df_list[1], how='outer')
         else:
             result = anno_amp_df_list[0]
-        # anno_amp_df.set_index(['Gene','Target'], inplace=True)
-        # result = anno_amp_df.apply(lambda x: x)
+
         result[result > 500] = 0
         result = result.fillna(0)
         result = result.astype(int)
