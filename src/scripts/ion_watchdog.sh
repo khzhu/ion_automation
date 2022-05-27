@@ -1,4 +1,8 @@
 #!/bin/sh
+# --------------------------------------------------------------
+# Author: Kelsey Zhu
+# Description: script to start and stop watchdog daemon process
+# --------------------------------------------------------------
 if [ "$1" = "start" ]; then
     python3 ion_watchdog.py >> watchdog.log &
 else
